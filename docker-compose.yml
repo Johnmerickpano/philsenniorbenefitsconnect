@@ -1,0 +1,71 @@
+# PhilSenior Benefits Connect - development environment (M0)
+# Start ScyllaDB only:        docker compose up -d
+# Start ScyllaDB + backend:   docker compose --profile backend up -d --build   (available from M2)
+
+services:
+  scylla:
+    image: scylladb/scylla:${SCYLLA_VERSION}
+    container_name: psbc-scylla
+    restart: unless-stopped
+    # Dev-only resource limits so it runs on a laptop. Do NOT use these flags in production.
+    command: >
+      --smp ${SCYLLA_SMP}
+      --memory ${SCYLLA_MEMORY}
+      --overprovisioned 1
+      --developer-mode 1
+      --api-address 0.0.0.0
+    ports:
+      - "${SCYLLA_HOST_PORT}:9042"
+    volumes:
+      - scylla_data:/var/lib/scylla
+    networks:
+      - psbc-net
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  # One-shot job: creates the keyspace after ScyllaDB is healthy, then exits.
+  scylla-init:
+    image: scylladb/scylla:${SCYLLA_VERSION}
+    container_name: psbc-scylla-init
+    depends_on:
+      scylla:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - psbc-net
+    volumes:
+      - ./infrastructure/scripts/init-keyspace.sh:/init-keyspace.sh:ro
+    environment:
+      SCYLLA_KEYSPACE: ${SCYLLA_KEYSPACE}
+      SCYLLA_REPLICATION_FACTOR: ${SCYLLA_REPLICATION_FACTOR}
+    entrypoint: ["/bin/bash", "/init-keyspace.sh"]
+
+  # Backend is added in M2. Profile keeps it out of `docker compose up -d` until then.
+  backend:
+    profiles: ["backend"]
+    build:
+      context: ./backend
+    container_name: psbc-backend
+    restart: unless-stopped
+    depends_on:
+      scylla-init:
+        condition: service_completed_successfully
+    env_file: .env
+    environment:
+      SCYLLA_HOSTS: scylla
+      SCYLLA_PORT: "9042"
+    ports:
+      - "${API_HOST_PORT}:8080"
+    networks:
+      - psbc-net
+
+networks:
+  psbc-net:
+    driver: bridge
+
+volumes:
+  scylla_data:

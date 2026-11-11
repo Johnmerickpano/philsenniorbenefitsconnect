@@ -1,0 +1,15 @@
+.env
+*.log
+backend/bin/
+backend/tmp/
+*.exe
+frontend/.dart_tool/
+frontend/build/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+# Never commit real beneficiary data
+*.xlsx
+*.csv
+!**/samples/*.csv
