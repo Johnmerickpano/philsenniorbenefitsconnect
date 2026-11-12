@@ -66,6 +66,18 @@ func decodeAPIJSON(w http.ResponseWriter, r *http.Request, destination any) erro
 	return nil
 }
 
+func parseBirthDate(value *string) (*time.Time, error) {
+	if value == nil {
+		return nil, nil
+	}
+
+	parsed, err := time.Parse("2006-01-02", strings.TrimSpace(*value))
+	if err != nil {
+		return nil, err
+	}
+
+	return &parsed, nil
+}
 func authenticatedUserID(r *http.Request) (gocql.UUID, bool) {
 	user, ok := auth.AuthenticatedUserFromContext(r.Context())
 	if !ok {
@@ -99,14 +111,10 @@ func (h *HTTPHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var birthDate *time.Time
-	if request.BirthDate != nil {
-		parsed, err := time.Parse("2006-01-02", strings.TrimSpace(*request.BirthDate))
-		if err != nil {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "birth_date must use YYYY-MM-DD"})
-			return
-		}
-		birthDate = &parsed
+	birthDate, err := parseBirthDate(request.BirthDate)
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "birth_date must use YYYY-MM-DD"})
+		return
 	}
 
 	beneficiary := &schema.Beneficiary{
@@ -340,14 +348,10 @@ func (h *HTTPHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var birthDate *time.Time
-	if request.BirthDate != nil {
-		parsed, err := time.Parse("2006-01-02", strings.TrimSpace(*request.BirthDate))
-		if err != nil {
-			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "birth_date must use YYYY-MM-DD"})
-			return
-		}
-		birthDate = &parsed
+	birthDate, err := parseBirthDate(request.BirthDate)
+	if err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "birth_date must use YYYY-MM-DD"})
+		return
 	}
 
 	profile := BeneficiaryProfile{
