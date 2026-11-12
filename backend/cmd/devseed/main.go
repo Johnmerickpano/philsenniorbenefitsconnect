@@ -19,6 +19,15 @@ import (
 func main() {
 	username := strings.TrimSpace(os.Getenv("PSBC_SEED_USERNAME"))
 	password := os.Getenv("PSBC_SEED_PASSWORD")
+	role := schema.UserRole(strings.TrimSpace(os.Getenv("PSBC_SEED_ROLE")))
+	if role == "" {
+		role = schema.RoleOSCAStaff
+	}
+	switch role {
+	case schema.RoleOSCAStaff, schema.RoleSeniorCitizen:
+	default:
+		log.Fatal("PSBC_SEED_ROLE must be OSCA_STAFF or SENIOR_CITIZEN")
+	}
 
 	if username == "" || password == "" {
 		log.Fatal("PSBC_SEED_USERNAME and PSBC_SEED_PASSWORD are required")
@@ -52,7 +61,7 @@ func main() {
 		UserID:             gocql.TimeUUID(),
 		Username:           username,
 		PasswordHash:       passwordHash,
-		UserRole:           schema.RoleSeniorCitizen,
+		UserRole:           role,
 		FullName:           "Development Test Account",
 		IsActive:           true,
 		FailedLoginCount:   0,
@@ -68,6 +77,6 @@ func main() {
 	}
 
 	fmt.Printf("Development account created successfully. Username: %s\n", username)
-	fmt.Println("Role: SENIOR_CITIZEN")
+	fmt.Printf("Role: %s\n", role)
 	fmt.Println("Active: true")
 }

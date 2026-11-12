@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/Johnmerickpano/philsenniorbenefitsconnect/internal/auth"
+	"github.com/Johnmerickpano/philsenniorbenefitsconnect/internal/beneficiary"
 	"github.com/Johnmerickpano/philsenniorbenefitsconnect/internal/config"
 	"github.com/Johnmerickpano/philsenniorbenefitsconnect/internal/database"
+	"github.com/Johnmerickpano/philsenniorbenefitsconnect/internal/database/schema"
 )
 
 func main() {
@@ -45,6 +47,25 @@ func main() {
 		log.Fatalf("initialize authentication service: %v", err)
 	}
 
+	beneficiaryRepository, err := beneficiary.NewRepository(session)
+	if err != nil {
+		log.Fatalf("initialize beneficiary repository: %v", err)
+	}
+
+	beneficiaryHandler := beneficiary.NewHTTPHandler(beneficiaryRepository)
+
+	// Registry operations are restricted to authenticated OSCA staff
+	// and administrators. Authenticate must wrap RequireRoles.
+	staffOnly := func(next http.Handler) http.Handler {
+		return authService.Authenticate(
+			auth.RequireRoles(
+				schema.RoleSuperAdmin,
+				schema.RoleOSCAAdmin,
+				schema.RoleOSCAStaff,
+			)(next),
+		)
+	}
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) {
@@ -65,9 +86,26 @@ func main() {
 		_, _ = w.Write([]byte("READY"))
 	})
 
+	// Authentication routes.
 	mux.Handle("POST /api/v1/auth/login", auth.NewLoginHandler(authService))
 	mux.Handle("POST /api/v1/auth/refresh", auth.NewRefreshHandler(authService))
 	mux.Handle("GET /api/v1/auth/me", authService.Authenticate(auth.NewMeHandler()))
+
+	// Beneficiary registry routes: OSCA staff and administrators only.
+	mux.Handle("POST /api/v1/beneficiaries",
+		staffOnly(http.HandlerFunc(beneficiaryHandler.Create)))
+
+	mux.Handle("GET /api/v1/beneficiaries",
+		staffOnly(http.HandlerFunc(beneficiaryHandler.List)))
+
+	mux.Handle("GET /api/v1/beneficiaries/search",
+		staffOnly(http.HandlerFunc(beneficiaryHandler.Search)))
+
+	mux.Handle("GET /api/v1/beneficiaries/{id}",
+		staffOnly(http.HandlerFunc(beneficiaryHandler.GetByID)))
+
+	mux.Handle("PUT /api/v1/beneficiaries/{id}",
+		staffOnly(http.HandlerFunc(beneficiaryHandler.UpdateProfile)))
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
